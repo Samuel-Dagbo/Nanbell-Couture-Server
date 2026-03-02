@@ -12,20 +12,21 @@ const startSelfPing = () => {
 
   const baseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
   const targetUrl = `${baseUrl}${SELF_PING_PATH}`;
-
-  setInterval(async () => {
+  const ping = async () => {
     try {
       const response = await fetch(targetUrl, { method: "GET" });
       console.log(`Self-ping ${targetUrl} -> ${response.status}`);
     } catch (error) {
       console.error("Self-ping failed:", error.message);
     }
-  }, SELF_PING_INTERVAL_MS);
+  };
+
+  ping();
+  setInterval(ping, SELF_PING_INTERVAL_MS);
 };
 
 connectDB().then(() => {
   app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
     startSelfPing();
   });
 });
