@@ -1,4 +1,5 @@
 const Order = require("../models/Order");
+const { sendEmail } = require("../utils/email");
 
 const generateOrderCode = () => {
   const n = Math.floor(Math.random() * 9000) + 1000;
@@ -15,6 +16,31 @@ const asBool = (value, fallback = true) => {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "boolean") return value;
   return String(value).toLowerCase() === "true";
+};
+
+const getOrderItemName = (order) =>
+  order.orderType === "shop"
+    ? order.shopItem?.name || "Shop item"
+    : order.dressType || order.template?.name || "Custom dress";
+
+const sendOrderPlacedEmail = async (order) => {
+  if (!order.customer?.email) return;
+  const itemName = getOrderItemName(order);
+  await sendEmail({
+    to: order.customer.email,
+    subject: `Order received (${order.orderCode})`,
+    text: `Hi ${order.customer.fullName}, your order for "${itemName}" has been received. Current status: ${order.status}.`
+  });
+};
+
+const sendOrderStatusEmail = async (order) => {
+  if (!order.customer?.email) return;
+  const itemName = getOrderItemName(order);
+  await sendEmail({
+    to: order.customer.email,
+    subject: `Order update (${order.orderCode})`,
+    text: `Hi ${order.customer.fullName}, your order "${itemName}" is now "${order.status}".`
+  });
 };
 
 const createOrder = async (req, res) => {
@@ -40,7 +66,12 @@ const createOrder = async (req, res) => {
         notes: notes || ""
       });
 
-      const populated = await order.populate(["customer", "template", "shopItem"]);
+      const populated = await order.populate([
+        { path: "customer", select: "fullName phone email" },
+        { path: "template" },
+        { path: "shopItem" }
+      ]);
+      await sendOrderPlacedEmail(populated);
       return res.status(201).json(populated);
     }
 
@@ -60,7 +91,12 @@ const createOrder = async (req, res) => {
       notes: notes || ""
     });
 
-    const populated = await order.populate(["customer", "template", "shopItem"]);
+    const populated = await order.populate([
+      { path: "customer", select: "fullName phone email" },
+      { path: "template" },
+      { path: "shopItem" }
+    ]);
+    await sendOrderPlacedEmail(populated);
     return res.status(201).json(populated);
   } catch (error) {
     return res.status(500).json({ message: "Server error", error: error.message });
@@ -94,6 +130,7 @@ const updateOrderStatus = async (req, res) => {
     .populate("shopItem");
 
   if (!order) return res.status(404).json({ message: "Order not found" });
+  await sendOrderStatusEmail(order);
   return res.json(order);
 };
 
@@ -108,6 +145,7 @@ const markTransactionCompleted = async (req, res) => {
     .populate("shopItem");
 
   if (!order) return res.status(404).json({ message: "Order not found" });
+  await sendOrderStatusEmail({ ...order.toObject(), status: "Transaction Completed" });
   return res.json(order);
 };
 
