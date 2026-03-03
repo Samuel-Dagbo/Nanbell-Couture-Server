@@ -1,50 +1,51 @@
 const nodemailer = require("nodemailer");
 
 let transporter;
-const EMAIL_TIMEOUT_MS = 8000;
+const EMAIL_TIMEOUT_MS = 15000;
+
+const getEmailCredentials = () => {
+  const user = String(process.env.EMAIL_USER || "").trim();
+  const pass = String(process.env.EMAIL_APP_PASSWORD || "").replace(/\s+/g, "").trim();
+  return { user, pass };
+};
+
+const canSendEmail = () => {
+  const { user, pass } = getEmailCredentials();
+  return Boolean(user && pass);
+};
 
 const getTransporter = () => {
   if (!transporter) {
+    const { user, pass } = getEmailCredentials();
     transporter = nodemailer.createTransport({
-      service: "gmail",
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
       connectionTimeout: EMAIL_TIMEOUT_MS,
       greetingTimeout: EMAIL_TIMEOUT_MS,
       socketTimeout: EMAIL_TIMEOUT_MS,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_APP_PASSWORD
-      }
+      auth: { user, pass }
     });
   }
   return transporter;
 };
 
-const canSendEmail = () => Boolean(process.env.EMAIL_USER && process.env.EMAIL_APP_PASSWORD);
-
 const sendEmail = async ({ to, subject, text, html }) => {
   if (!canSendEmail() || !to) return false;
 
+  const { user } = getEmailCredentials();
   try {
-    const mailTask = getTransporter().sendMail({
-      from: `"Nanbell Couture" <${process.env.EMAIL_USER}>`,
+    await getTransporter().sendMail({
+      from: `"Nanbell Couture" <${user}>`,
       to,
       subject,
       text,
       html
     });
-
-    const timeoutTask = new Promise((resolve) => {
-      setTimeout(() => resolve(false), EMAIL_TIMEOUT_MS);
-    });
-
-    const result = await Promise.race([mailTask, timeoutTask]);
-    if (!result) {
-      console.error("Email send timed out.");
-      return false;
-    }
+    console.error(`[EMAIL] Sent to ${to}: ${subject}`);
     return true;
   } catch (error) {
-    console.error("Email send failed:", error.message);
+    console.error(`[EMAIL] Failed to ${to}: ${error.message}`);
     return false;
   }
 };
