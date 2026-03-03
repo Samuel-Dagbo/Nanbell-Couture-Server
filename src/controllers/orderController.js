@@ -26,7 +26,7 @@ const getOrderItemName = (order) =>
 const sendOrderPlacedEmail = async (order) => {
   if (!order.customer?.email) return;
   const itemName = getOrderItemName(order);
-  await sendEmail({
+  sendEmail({
     to: order.customer.email,
     subject: `Order received (${order.orderCode})`,
     text: `Hi ${order.customer.fullName}, your order for "${itemName}" has been received. Current status: ${order.status}.`
@@ -36,7 +36,7 @@ const sendOrderPlacedEmail = async (order) => {
 const sendOrderStatusEmail = async (order) => {
   if (!order.customer?.email) return;
   const itemName = getOrderItemName(order);
-  await sendEmail({
+  sendEmail({
     to: order.customer.email,
     subject: `Order update (${order.orderCode})`,
     text: `Hi ${order.customer.fullName}, your order "${itemName}" is now "${order.status}".`

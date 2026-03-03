@@ -33,7 +33,7 @@ const register = async (req, res) => {
       role: "customer"
     });
 
-    await sendEmail({
+    sendEmail({
       to: user.email,
       subject: "Welcome to Nanbell Couture",
       text: `Hi ${user.fullName}, welcome to Nanbell Couture. Your account is ready and you can start placing orders now.`
@@ -69,7 +69,7 @@ const login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-    await sendEmail({
+    sendEmail({
       to: user.email,
       subject: "Login alert - Nanbell Couture",
       text: `Hello ${user.fullName}, your account was accessed on ${new Date().toISOString()}. If this was not you, reset your password immediately.`
@@ -139,7 +139,7 @@ const resetPassword = async (req, res) => {
     user.resetPasswordExpires = null;
     await user.save();
 
-    await sendEmail({
+    sendEmail({
       to: user.email,
       subject: "Password changed - Nanbell Couture",
       text: `Hello ${user.fullName}, your password was reset successfully.`
