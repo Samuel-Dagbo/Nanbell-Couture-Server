@@ -1,56 +1,68 @@
 const nodemailer = require("nodemailer");
+const { google } = require("googleapis");
 
-const EMAIL_TIMEOUT_MS = 10000;
+const EMAIL_TIMEOUT_MS = 15000;
+const OAUTH_REDIRECT_URI = "https://developers.google.com/oauthplayground";
 
-const getEmailCredentials = () => {
-  const user = String(process.env.EMAIL_USER || "").trim();
-  const pass = String(process.env.EMAIL_APP_PASSWORD || "").replace(/\s+/g, "").trim();
-  return { user, pass };
-};
+const getEmailCredentials = () => ({
+  user: String(process.env.EMAIL_USER || "").trim(),
+  clientId: String(process.env.GOOGLE_CLIENT_ID || "").trim(),
+  clientSecret: String(process.env.GOOGLE_CLIENT_SECRET || "").trim(),
+  refreshToken: String(process.env.GOOGLE_REFRESH_TOKEN || "").trim()
+});
 
 const canSendEmail = () => {
-  const { user, pass } = getEmailCredentials();
-  return Boolean(user && pass);
+  const { user, clientId, clientSecret, refreshToken } = getEmailCredentials();
+  return Boolean(user && clientId && clientSecret && refreshToken);
 };
 
-const buildTransport = (user, pass, port, secure) =>
-  nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port,
-    secure,
-    requireTLS: !secure,
-    connectionTimeout: EMAIL_TIMEOUT_MS,
-    greetingTimeout: EMAIL_TIMEOUT_MS,
-    socketTimeout: EMAIL_TIMEOUT_MS,
-    auth: { user, pass }
-  });
+const getAccessToken = async ({ clientId, clientSecret, refreshToken }) => {
+  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, OAUTH_REDIRECT_URI);
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+  const tokenResponse = await oauth2Client.getAccessToken();
+  return tokenResponse?.token || "";
+};
 
 const sendEmail = async ({ to, subject, text, html }) => {
   if (!canSendEmail() || !to) return false;
 
-  const { user, pass } = getEmailCredentials();
-  const attempts = [
-    { port: 465, secure: true, label: "smtp-465-ssl" },
-    { port: 587, secure: false, label: "smtp-587-tls" }
-  ];
+  const { user, clientId, clientSecret, refreshToken } = getEmailCredentials();
 
-  for (const attempt of attempts) {
-    try {
-      const transporter = buildTransport(user, pass, attempt.port, attempt.secure);
-      await transporter.sendMail({
-        from: `"Nanbell Couture" <${user}>`,
-        to,
-        subject,
-        text,
-        html
-      });
-      return true;
-    } catch (error) {
-      console.error(`[EMAIL] ${attempt.label} failed to ${to}: ${error.message}`);
+  try {
+    const accessToken = await getAccessToken({ clientId, clientSecret, refreshToken });
+    if (!accessToken) {
+      console.error("[EMAIL] Could not obtain Gmail access token.");
+      return false;
     }
-  }
 
-  return false;
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      connectionTimeout: EMAIL_TIMEOUT_MS,
+      greetingTimeout: EMAIL_TIMEOUT_MS,
+      socketTimeout: EMAIL_TIMEOUT_MS,
+      auth: {
+        type: "OAuth2",
+        user,
+        clientId,
+        clientSecret,
+        refreshToken,
+        accessToken
+      }
+    });
+
+    await transporter.sendMail({
+      from: `"Nanbell Couture" <${user}>`,
+      to,
+      subject,
+      text,
+      html
+    });
+
+    return true;
+  } catch (error) {
+    console.error(`[EMAIL] Gmail OAuth send failed to ${to}: ${error.message}`);
+    return false;
+  }
 };
 
 module.exports = { sendEmail, canSendEmail };
