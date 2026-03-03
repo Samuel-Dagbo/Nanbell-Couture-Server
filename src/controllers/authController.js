@@ -5,6 +5,8 @@ const createToken = require("../config/token");
 const { sendEmail } = require("../utils/email");
 
 const getAppBaseUrl = () => process.env.APP_BASE_URL || "http://localhost:5173";
+const normalizeEmail = (value = "") => String(value).trim().toLowerCase();
+const normalizePhone = (value = "") => String(value).replace(/\s+/g, "").trim();
 
 const register = async (req, res) => {
   try {
@@ -13,12 +15,23 @@ const register = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-    const existingUser = await User.findOne({ $or: [{ email: normalizedEmail }, { phone }] });
-    if (existingUser) return res.status(400).json({ message: "User already exists" });
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedPhone = normalizePhone(phone);
+
+    const existingEmailUser = await User.findOne({ email: normalizedEmail });
+    if (existingEmailUser) return res.status(400).json({ message: "Email is already registered" });
+
+    const existingPhoneUser = await User.findOne({ phone: normalizedPhone });
+    if (existingPhoneUser) return res.status(400).json({ message: "Phone number is already registered" });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({ fullName, phone, email: normalizedEmail, password: hashedPassword, role: "customer" });
+    const user = await User.create({
+      fullName: fullName.trim(),
+      phone: normalizedPhone,
+      email: normalizedEmail,
+      password: hashedPassword,
+      role: "customer"
+    });
 
     await sendEmail({
       to: user.email,
@@ -43,8 +56,12 @@ const login = async (req, res) => {
       return res.status(400).json({ message: "emailOrPhone and password are required" });
     }
 
+    const credential = String(emailOrPhone).trim();
+    const normalizedEmail = normalizeEmail(credential);
+    const normalizedPhone = normalizePhone(credential);
+
     const user = await User.findOne({
-      $or: [{ email: emailOrPhone.toLowerCase() }, { phone: emailOrPhone }]
+      $or: [{ email: normalizedEmail }, { phone: normalizedPhone }, { phone: credential }]
     });
 
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
