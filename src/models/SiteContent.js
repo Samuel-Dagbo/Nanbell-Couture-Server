@@ -8,7 +8,7 @@ const siteContentSchema = new mongoose.Schema(
       type: String,
       default: "The creative force behind Nanbell Couture, dedicated to elegant and customer-focused fashion."
     },
-    founderImageUrl: { type: String, default: "" }
+    founderImageUrls: { type: [String], default: [] }
   },
   { timestamps: true }
 );

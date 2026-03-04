@@ -29,11 +29,29 @@ const updateSiteContent = async (req, res) => {
     if (typeof req.body.founderBio === "string") {
       updates.founderBio = req.body.founderBio.trim();
     }
-    if (typeof req.body.founderImageUrl === "string" && req.body.founderImageUrl.trim()) {
-      updates.founderImageUrl = req.body.founderImageUrl.trim();
+
+    const currentImages = Array.isArray(content.founderImageUrls) ? [...content.founderImageUrls] : [];
+
+    if (typeof req.body.imagesToRemove === "string" && req.body.imagesToRemove.trim()) {
+      let imagesToRemove = [];
+      try {
+        imagesToRemove = JSON.parse(req.body.imagesToRemove);
+      } catch (_e) {
+        imagesToRemove = [];
+      }
+
+      if (Array.isArray(imagesToRemove) && imagesToRemove.length > 0) {
+        updates.founderImageUrls = currentImages.filter((url) => !imagesToRemove.includes(url));
+      }
     }
-    if (req.file) {
-      updates.founderImageUrl = await saveCompressedImage(req.file.buffer, "site");
+
+    if (Array.isArray(req.files) && req.files.length > 0) {
+      const uploadedImages = [];
+      for (const file of req.files) {
+        uploadedImages.push(await saveCompressedImage(file.buffer, "site"));
+      }
+      const baseImages = updates.founderImageUrls || currentImages;
+      updates.founderImageUrls = [...baseImages, ...uploadedImages];
     }
 
     const updated = await SiteContent.findByIdAndUpdate(content._id, updates, { new: true });

@@ -6,6 +6,6 @@ const upload = require("../middleware/uploadMiddleware");
 const router = express.Router();
 
 router.get("/", getSiteContent);
-router.put("/", protect, authorize("admin"), upload.single("founderImage"), updateSiteContent);
+router.put("/", protect, authorize("admin"), upload.array("founderImages", 10), updateSiteContent);
 
 module.exports = router;
