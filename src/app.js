@@ -7,6 +7,7 @@ const templateRoutes = require("./routes/templateRoutes");
 const shopItemRoutes = require("./routes/shopItemRoutes");
 const orderRoutes = require("./routes/orderRoutes");
 const customerRoutes = require("./routes/customerRoutes");
+const siteContentRoutes = require("./routes/siteContentRoutes");
 
 const app = express();
 
@@ -21,5 +22,6 @@ app.use("/api/templates", templateRoutes);
 app.use("/api/shop-items", shopItemRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/customers", customerRoutes);
+app.use("/api/site-content", siteContentRoutes);
 
 module.exports = app;
