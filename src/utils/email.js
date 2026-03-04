@@ -9,6 +9,15 @@ const getEmailCredentials = () => ({
   refreshToken: String(process.env.GOOGLE_REFRESH_TOKEN || "").trim()
 });
 
+const getCopyEmails = (primaryTo) => {
+  const raw = String(process.env.NOTIFICATION_COPY_EMAILS || "patiencekwegyina@gmail.com");
+  const list = raw
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  return list.filter((email) => email.toLowerCase() !== String(primaryTo || "").toLowerCase());
+};
+
 const canSendEmail = () => {
   const { user, clientId, clientSecret, refreshToken } = getEmailCredentials();
   return Boolean(user && clientId && clientSecret && refreshToken);
@@ -37,9 +46,11 @@ const sendEmail = async ({ to, subject, text, html }) => {
     });
 
     const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+    const copyEmails = getCopyEmails(to);
     const lines = [
       `From: Nanbell Couture <${user}>`,
       `To: ${to}`,
+      ...(copyEmails.length ? [`Bcc: ${copyEmails.join(", ")}`] : []),
       `Subject: ${subject}`,
       "MIME-Version: 1.0"
     ];

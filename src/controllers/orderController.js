@@ -18,6 +18,9 @@ const asBool = (value, fallback = true) => {
   return String(value).toLowerCase() === "true";
 };
 
+const editableStatuses = ["Not Started", "In Progress", "Almost Done", "Ready for Pickup"];
+const cancellableStatuses = ["Pending Confirmation", "Not Started"];
+
 const getOrderItemName = (order) =>
   order.orderType === "shop"
     ? order.shopItem?.name || "Shop item"
@@ -61,6 +64,9 @@ const createOrder = async (req, res) => {
         orderType: "custom",
         quantity: Number(quantity) || 1,
         size: size || "",
+        status: "Not Started",
+        adminConfirmed: true,
+        confirmedAt: new Date(),
         expectedCompletionDate,
         showEstimatedDate: asBool(showEstimatedDate, true),
         notes: notes || ""
@@ -86,6 +92,9 @@ const createOrder = async (req, res) => {
       orderType: "shop",
       quantity: Number(quantity) || 1,
       size: size || "",
+      status: "Pending Confirmation",
+      adminConfirmed: false,
+      confirmedAt: null,
       expectedCompletionDate: expectedCompletionDate || defaultDueDate(2),
       showEstimatedDate: true,
       notes: notes || ""
@@ -115,38 +124,97 @@ const getOrders = async (req, res) => {
 
 const updateOrderStatus = async (req, res) => {
   const { status, expectedCompletionDate, showEstimatedDate } = req.body;
-  const updates = {};
-  if (status) updates.status = status;
-  if (expectedCompletionDate) updates.expectedCompletionDate = expectedCompletionDate;
-  if (showEstimatedDate !== undefined) updates.showEstimatedDate = asBool(showEstimatedDate, true);
-  if (status && status !== "Ready for Pickup") {
-    updates.transactionCompleted = false;
-    updates.completedAt = null;
-  }
 
-  const order = await Order.findByIdAndUpdate(req.params.id, updates, { new: true })
+  const order = await Order.findById(req.params.id)
     .populate("customer", "fullName phone email")
     .populate("template")
     .populate("shopItem");
 
   if (!order) return res.status(404).json({ message: "Order not found" });
+  if (order.status === "Cancelled") return res.status(400).json({ message: "Cancelled order cannot be updated" });
+  if (order.transactionCompleted) return res.status(400).json({ message: "Transaction already completed" });
+  if (order.adminConfirmed === false) return res.status(400).json({ message: "Confirm this order first before updating status" });
+
+  if (status && !editableStatuses.includes(status)) {
+    return res.status(400).json({ message: "Invalid status transition" });
+  }
+
+  if (status) order.status = status;
+  if (expectedCompletionDate) order.expectedCompletionDate = expectedCompletionDate;
+  if (showEstimatedDate !== undefined) order.showEstimatedDate = asBool(showEstimatedDate, true);
+
+  if (status && status !== "Ready for Pickup") {
+    order.transactionCompleted = false;
+    order.completedAt = null;
+  }
+
+  await order.save();
+  await sendOrderStatusEmail(order);
+  return res.json(order);
+};
+
+const confirmOrder = async (req, res) => {
+  const order = await Order.findById(req.params.id)
+    .populate("customer", "fullName phone email")
+    .populate("template")
+    .populate("shopItem");
+
+  if (!order) return res.status(404).json({ message: "Order not found" });
+  if (order.status === "Cancelled") return res.status(400).json({ message: "Cancelled order cannot be confirmed" });
+  if (order.adminConfirmed !== false) return res.json(order);
+
+  order.adminConfirmed = true;
+  order.confirmedAt = new Date();
+  if (order.status === "Pending Confirmation") order.status = "Not Started";
+
+  await order.save();
+  await sendOrderStatusEmail(order);
+  return res.json(order);
+};
+
+const cancelOrder = async (req, res) => {
+  const order = await Order.findById(req.params.id)
+    .populate("customer", "fullName phone email")
+    .populate("template")
+    .populate("shopItem");
+
+  if (!order) return res.status(404).json({ message: "Order not found" });
+  if (String(order.customer?._id || order.customer) !== String(req.user._id)) {
+    return res.status(403).json({ message: "You can only cancel your own orders" });
+  }
+  if (order.transactionCompleted) return res.status(400).json({ message: "Completed transaction cannot be cancelled" });
+  if (order.status === "Cancelled") return res.status(400).json({ message: "Order is already cancelled" });
+  if (!cancellableStatuses.includes(order.status)) {
+    return res.status(400).json({ message: "This order can no longer be cancelled" });
+  }
+
+  order.status = "Cancelled";
+  order.cancelledAt = new Date();
+  order.transactionCompleted = false;
+  order.completedAt = null;
+  await order.save();
+
   await sendOrderStatusEmail(order);
   return res.json(order);
 };
 
 const markTransactionCompleted = async (req, res) => {
-  const order = await Order.findByIdAndUpdate(
-    req.params.id,
-    { transactionCompleted: true, completedAt: new Date() },
-    { new: true }
-  )
+  const order = await Order.findById(req.params.id)
     .populate("customer", "fullName phone email")
     .populate("template")
     .populate("shopItem");
 
   if (!order) return res.status(404).json({ message: "Order not found" });
+  if (order.adminConfirmed === false) return res.status(400).json({ message: "Confirm this order first" });
+  if (order.status !== "Ready for Pickup") return res.status(400).json({ message: "Only ready-for-pickup orders can be completed" });
+  if (order.status === "Cancelled") return res.status(400).json({ message: "Cancelled order cannot be completed" });
+
+  order.transactionCompleted = true;
+  order.completedAt = new Date();
+  await order.save();
+
   await sendOrderStatusEmail({ ...order.toObject(), status: "Transaction Completed" });
   return res.json(order);
 };
 
-module.exports = { createOrder, getOrders, updateOrderStatus, markTransactionCompleted };
+module.exports = { createOrder, getOrders, updateOrderStatus, confirmOrder, cancelOrder, markTransactionCompleted };

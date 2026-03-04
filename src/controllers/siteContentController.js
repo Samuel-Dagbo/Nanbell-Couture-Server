@@ -9,10 +9,20 @@ const getOrCreateMainContent = async () => {
   return content;
 };
 
+const normalizeImagePath = (url = "") => String(url).replace(/\\/g, "/").trim();
+
+const toImageList = (contentObj) => {
+  const urls = Array.isArray(contentObj.founderImageUrls) ? contentObj.founderImageUrls.map(normalizeImagePath) : [];
+  const legacy = contentObj.founderImageUrl ? [normalizeImagePath(contentObj.founderImageUrl)] : [];
+  return [...new Set([...urls, ...legacy].filter(Boolean))];
+};
+
 const getSiteContent = async (_req, res) => {
   try {
     const content = await getOrCreateMainContent();
-    return res.json(content);
+    const asObj = content.toObject();
+    asObj.founderImageUrls = toImageList(asObj);
+    return res.json(asObj);
   } catch (error) {
     return res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -30,7 +40,7 @@ const updateSiteContent = async (req, res) => {
       updates.founderBio = req.body.founderBio.trim();
     }
 
-    const currentImages = Array.isArray(content.founderImageUrls) ? [...content.founderImageUrls] : [];
+    const currentImages = toImageList(content.toObject());
 
     if (typeof req.body.imagesToRemove === "string" && req.body.imagesToRemove.trim()) {
       let imagesToRemove = [];
@@ -45,17 +55,35 @@ const updateSiteContent = async (req, res) => {
       }
     }
 
+    if (typeof req.body.founderImageUrlsText === "string" && req.body.founderImageUrlsText.trim()) {
+      const typedUrls = req.body.founderImageUrlsText
+        .split(/\r?\n|,/)
+        .map((url) => normalizeImagePath(url))
+        .filter(Boolean);
+
+      if (typedUrls.length > 0) {
+        const baseImages = updates.founderImageUrls || currentImages;
+        updates.founderImageUrls = [...baseImages, ...typedUrls];
+      }
+    }
+
     if (Array.isArray(req.files) && req.files.length > 0) {
       const uploadedImages = [];
       for (const file of req.files) {
         uploadedImages.push(await saveCompressedImage(file.buffer, "site"));
       }
       const baseImages = updates.founderImageUrls || currentImages;
-      updates.founderImageUrls = [...baseImages, ...uploadedImages];
+      updates.founderImageUrls = [...baseImages, ...uploadedImages].map(normalizeImagePath);
+    }
+
+    if (Array.isArray(updates.founderImageUrls)) {
+      updates.founderImageUrls = [...new Set(updates.founderImageUrls.map(normalizeImagePath).filter(Boolean))];
     }
 
     const updated = await SiteContent.findByIdAndUpdate(content._id, updates, { new: true });
-    return res.json(updated);
+    const asObj = updated.toObject();
+    asObj.founderImageUrls = toImageList(asObj);
+    return res.json(asObj);
   } catch (error) {
     return res.status(500).json({ message: "Server error", error: error.message });
   }

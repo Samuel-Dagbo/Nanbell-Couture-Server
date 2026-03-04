@@ -12,9 +12,12 @@ const orderSchema = new mongoose.Schema(
     size: { type: String, default: "" },
     status: {
       type: String,
-      enum: ["Not Started", "In Progress", "Almost Done", "Ready for Pickup"],
+      enum: ["Pending Confirmation", "Not Started", "In Progress", "Almost Done", "Ready for Pickup", "Cancelled"],
       default: "Not Started"
     },
+    adminConfirmed: { type: Boolean, default: true },
+    confirmedAt: { type: Date, default: null },
+    cancelledAt: { type: Date, default: null },
     expectedCompletionDate: { type: Date, required: true },
     showEstimatedDate: { type: Boolean, default: true },
     transactionCompleted: { type: Boolean, default: false },
