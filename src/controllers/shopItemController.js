@@ -1,5 +1,5 @@
 const ShopItem = require("../models/ShopItem");
-const { saveCompressedImage } = require("../utils/imageStorage");
+const { saveCompressedImage, saveImageFromUrl } = require("../utils/imageStorage");
 
 const getShopItems = async (_req, res) => {
   const items = await ShopItem.find().sort({ createdAt: -1 });
@@ -9,7 +9,9 @@ const getShopItems = async (_req, res) => {
 const createShopItem = async (req, res) => {
   try {
     const { name, description, imageUrl, price, available } = req.body;
-    const resolvedImageUrl = req.file ? await saveCompressedImage(req.file.buffer, "shop") : imageUrl;
+    let resolvedImageUrl = "";
+    if (req.file) resolvedImageUrl = await saveCompressedImage(req.file.buffer, "shop");
+    else if (imageUrl) resolvedImageUrl = await saveImageFromUrl(imageUrl, "shop");
 
     if (!name || !description || !resolvedImageUrl || price === undefined) {
       return res.status(400).json({ message: "name, description, image, price are required" });
@@ -33,6 +35,9 @@ const updateShopItem = async (req, res) => {
   try {
     const updates = { ...req.body };
     if (req.file) updates.imageUrl = await saveCompressedImage(req.file.buffer, "shop");
+    else if (typeof req.body.imageUrl === "string" && req.body.imageUrl.trim()) {
+      updates.imageUrl = await saveImageFromUrl(req.body.imageUrl.trim(), "shop");
+    }
     if (updates.available !== undefined) updates.available = updates.available === "true" || updates.available === true;
 
     const item = await ShopItem.findByIdAndUpdate(req.params.id, updates, { new: true });

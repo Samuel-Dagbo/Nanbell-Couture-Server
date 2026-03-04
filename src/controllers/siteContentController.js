@@ -1,5 +1,5 @@
 const SiteContent = require("../models/SiteContent");
-const { saveCompressedImage } = require("../utils/imageStorage");
+const { saveCompressedImage, saveImageFromUrl } = require("../utils/imageStorage");
 
 const getOrCreateMainContent = async () => {
   let content = await SiteContent.findOne({ key: "main" });
@@ -62,8 +62,12 @@ const updateSiteContent = async (req, res) => {
         .filter(Boolean);
 
       if (typedUrls.length > 0) {
+        const imported = [];
+        for (const url of typedUrls) {
+          imported.push(await saveImageFromUrl(url, "site"));
+        }
         const baseImages = updates.founderImageUrls || currentImages;
-        updates.founderImageUrls = [...baseImages, ...typedUrls];
+        updates.founderImageUrls = [...baseImages, ...imported];
       }
     }
 

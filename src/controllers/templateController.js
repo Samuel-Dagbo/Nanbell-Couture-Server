@@ -1,5 +1,5 @@
 const Template = require("../models/Template");
-const { saveCompressedImage } = require("../utils/imageStorage");
+const { saveCompressedImage, saveImageFromUrl } = require("../utils/imageStorage");
 
 const getTemplates = async (_req, res) => {
   const templates = await Template.find().sort({ createdAt: -1 });
@@ -9,7 +9,9 @@ const getTemplates = async (_req, res) => {
 const createTemplate = async (req, res) => {
   try {
     const { name, description, imageUrl } = req.body;
-    const resolvedImageUrl = req.file ? await saveCompressedImage(req.file.buffer, "templates") : imageUrl;
+    let resolvedImageUrl = "";
+    if (req.file) resolvedImageUrl = await saveCompressedImage(req.file.buffer, "templates");
+    else if (imageUrl) resolvedImageUrl = await saveImageFromUrl(imageUrl, "templates");
 
     if (!name || !description || !resolvedImageUrl) {
       return res.status(400).json({ message: "name, description, image are required" });
@@ -26,6 +28,9 @@ const updateTemplate = async (req, res) => {
   try {
     const updates = { ...req.body };
     if (req.file) updates.imageUrl = await saveCompressedImage(req.file.buffer, "templates");
+    else if (typeof req.body.imageUrl === "string" && req.body.imageUrl.trim()) {
+      updates.imageUrl = await saveImageFromUrl(req.body.imageUrl.trim(), "templates");
+    }
 
     const template = await Template.findByIdAndUpdate(req.params.id, updates, { new: true });
     if (!template) return res.status(404).json({ message: "Template not found" });
