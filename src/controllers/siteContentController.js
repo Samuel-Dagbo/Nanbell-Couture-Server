@@ -1,6 +1,8 @@
 const SiteContent = require("../models/SiteContent");
 const { saveCompressedImage, saveImageFromUrl } = require("../utils/imageStorage");
 
+const isHttpUrl = (value = "") => /^https?:\/\//i.test(String(value).trim());
+
 const getOrCreateMainContent = async () => {
   let content = await SiteContent.findOne({ key: "main" });
   if (!content) {
@@ -62,12 +64,21 @@ const updateSiteContent = async (req, res) => {
         .filter(Boolean);
 
       if (typedUrls.length > 0) {
-        const imported = [];
+        const importedOrRaw = [];
         for (const url of typedUrls) {
-          imported.push(await saveImageFromUrl(url, "site"));
+          if (!isHttpUrl(url)) {
+            importedOrRaw.push(url);
+            continue;
+          }
+
+          try {
+            importedOrRaw.push(await saveImageFromUrl(url, "site"));
+          } catch (_e) {
+            importedOrRaw.push(url);
+          }
         }
         const baseImages = updates.founderImageUrls || currentImages;
-        updates.founderImageUrls = [...baseImages, ...imported];
+        updates.founderImageUrls = [...baseImages, ...importedOrRaw];
       }
     }
 
